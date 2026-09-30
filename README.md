@@ -1,65 +1,83 @@
 # Optical Tweezers Brownian Motion Analysis
 
-This repository contains a Jupyter notebook for analysing the Brownian motion of 1 µm and 3 µm polystyrene beads suspended in deionized water (0.04% CV), recorded using a **Thorlabs Portable Optical Tweezer** setup. The goal is to quantify bead displacements over time and estimate the effective viscosity of the medium. This experiment is one of the advanced experiments in the Senior Physics lab. I developed this workflow for the experiment which uses an add-on in Blender to perform the motion tracking of the beads from video recordings of the microscope. I found the standard motion tracking software listed in the manual (Viana.NET) to be unusable because it relies on tracking colours and I'm really not sure how any other student used it for this experiment. Hopefully future 3rd Physics students that come across this repo find it useful. Please feel free to reach out to me at yunki.yau@gmail.com if anything is unclear. 
+This project analyses microscopic bead motion recorded with a Thorlabs portable optical-tweezers setup at the University of Sydney. I used Blender to track beads in microscope video, exported the tracked positions with an open-source add-on, and developed a Python notebook to convert the coordinates into physical measurements and compare the motion of 1 µm and 3 µm beads.
+
+Blender provides the tracking functionality; this repository contains my downstream analysis, not a tracking algorithm written from scratch.
 
 ## Workflow
 
-1. **Motion tracking**  
-   Videos (1280×1024 resolution, 15 FPS) were tracked in *Blender 2.8* (GNU GPL).  
-   - Tracking add-on: [blenderMotionExport](https://github.com/Amudtogal/blenderMotionExport)  
-   - Output: CSV files with bead trajectories.
+1. Record microscope video (1280 × 1024, 15 frames per second in this experiment).
+2. Track bead positions in Blender 2.8 and export trajectories using [blenderMotionExport](https://github.com/Amudtogal/blenderMotionExport).
+3. Load the semicolon-delimited `frame;x;y` CSV files into Python.
+4. Convert pixels to micrometres using 11.66 pixels/µm, based on a 3 µm bead diameter.
+5. Calculate squared displacement from each trajectory's initial position, then its cumulative mean and the average across beads of the same size.
+6. Plot trajectories and fit displacement trends with a straight line, including the fitted intercept.
 
-2. **Analysis (this notebook)**  
-   - Convert pixel coordinates → micrometres (11.66 px/µm, based on 3 µm bead diameter).  
-   - Compute per-bead mean squared displacement (MSD) and time-averaged values.  
-   - Average across beads of the same size.  
-   - Plot ⟨r²⟩ vs time and fit a line through the origin.  
-   - The fitted slope relates to diffusion and can be used to estimate effective viscosity.
+The calculation retains the original experiment's cumulative displacement definition. It is not the usual time-lag-averaged mean-squared-displacement estimator. Tracks within a size group are truncated to the shortest track and aligned by elapsed time since each track starts, not by their absolute frame numbers.
 
-## Repository structure
+## Included files
 
-```
-notebooks/
-    BrownianMotionAnalysis.ipynb   # main analysis & plots
-data/
-    raw CSV files used in the analysis
-README.md
+```text
+notebooks/BrownianMotionAnalysis.ipynb  Analysis and plots
+data/                                 Ten exported Brownian-motion tracks
+tests/test_analysis.py                Numerical and run-all regression checks
 ```
 
-## Requirements
+The microscope videos, Blender project and separate trapped-bead recording are not included. You can run the Brownian-motion analysis using the supplied CSVs without Blender or microscope hardware.
 
-- Python 3.10+  
-- Jupyter Notebook  
-- numpy  
-- matplotlib  
+## Setup and use
 
-Install with:
+Use Python 3.10 or later. From the repository root:
+
 ```bash
-pip install numpy matplotlib jupyter
+python -m pip install numpy matplotlib jupyter
+jupyter notebook notebooks/BrownianMotionAnalysis.ipynb
 ```
 
-## Usage
+Run all cells. The notebook finds `data/` when launched from the repository root or `notebooks/`. If using a different working directory, set `DATA_DIR` in the first code cell to the repository's data directory. In Colab, clone or upload the repository, keep its directory structure, and change into its root before running.
 
-1. Clone the repository and add your CSV tracking files into `data/`.  
-2. Launch Jupyter and open the notebook:
-   ```bash
-   jupyter notebook notebooks/BrownianMotionAnalysis.ipynb
-   ```
-3. Run all cells to reproduce the analysis and plots.  
+CSV rows must contain finite coordinates and consecutive integer frame numbers. Missing frames raise an explicit error because the analysis assumes one row per frame; do not remove gaps silently. The supplied tracks satisfy this requirement, including the track whose first frame is 936.
 
-Figures are generated inline in the notebook.
+## Corrections to the historical notebook
 
-## Notes & Limitations
+The corrected notebook preserves the raw measurements and does not revise the original report. Previous source and saved outputs remain available in Git history.
 
-- Frame-to-time conversion assumes **15 FPS** which is the speed of the Thorlabs camera in the kit.  
-- Pixel-to-µm calibration (11.66 px/µm) is approximate; uncertainties due to bead depth (~20 µm well) and manufacturer CV (±5%) are **not yet propagated**.  
-- Future work: add code to estimate **maximum trapping force** from the strongest bead trap event.
+- Replaced hard-coded Colab `/content/` paths with repository-relative data discovery.
+- Matched the time axis to the displacement samples: the first displacement after the reference frame occurs at `1 / FPS`, not zero.
+- Kept the fitted intercept in regression predictions, residuals, R² calculations and plotted lines. The regression is an unconstrained straight-line fit, not a fit forced through the origin.
+- Corrected speed conversion to `distance_um × FPS × 1e-6` metres per second. The old expression incorrectly placed the frame rate inside the square root. At 15 FPS, this correction alone increases speeds by √15 for the same track.
+- Removed stale saved outputs and hard-coded force/uncertainty results. Rerun the cells to generate current plots and statistics.
+- Made the missing trapped-bead analysis optional, with an explicit skip message.
 
-## Citation
+These corrections can change figures and numerical results relative to the historical report. They are software corrections, not a new validation of the experiment.
 
-If you use this repository in academic or research work, please cite:
+## Optional trapped-bead calculation
 
-**Yunki Yau**, *Optical Tweezers Brownian Motion Analysis*, GitHub, 2025.  
-[https://github.com/yunkiyau](https://github.com/yunkiyau)
+The notebook references `data/laser4_Held_bead.csv`, which is not supplied. If you have the original file, place it there in the same `frame;x;y` format. The optional cells then calculate frame-to-frame speed and a Stokes-force estimate using the historical viscosity value (570.38 × 10⁻⁶ Pa·s) and bead radius (1.5 µm).
 
----
+Without that recording, the force result cannot be reproduced or validated. Do not substitute one of the freely moving Brownian tracks. The historical viscosity is an explicit input, not a freshly calibrated value or proof that the resulting force is accurate.
+
+## Limitations
+
+- The calibration of 11.66 pixels/µm and 15 FPS are specific to this experiment.
+- Pixel calibration, localisation, timing, bead-size and viscosity uncertainties have not been propagated through the complete analysis.
+- Cumulative displacement observations are correlated. The notebook's ordinary-least-squares standard errors and nominal 1.96× values are descriptive; they are not validated confidence intervals for the physical parameters.
+- The analysis is an educational research workflow, not a general-purpose particle-tracking or validated force-calibration package.
+
+## Regression checks
+
+After installing the dependencies, run:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The checks cover speed units, stationary particles, displacement averaging, regression intercepts and time origin, CSV calibration/frame validation, and execution of all code cells with the included data from both supported working directories. They do not require hardware or establish the validity of the original experiment.
+
+## Author and attribution
+
+Analysis workflow: Yunki Yau, University of Sydney Senior Physics laboratory project, 2024.
+
+Motion tracking: Blender; CSV export: the independently developed [blenderMotionExport](https://github.com/Amudtogal/blenderMotionExport) add-on.
+
+Questions: yunki.yau@gmail.com.
